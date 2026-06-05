@@ -1,0 +1,167 @@
+CREATE DATABASE ecommerce_db;
+USE ecommerce_db;
+
+-- 1. Categories
+CREATE TABLE categories (
+    category_id INT AUTO_INCREMENT PRIMARY KEY,
+    category_name VARCHAR(100) NOT NULL
+);
+
+-- 2. Products
+CREATE TABLE products (
+    product_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_name VARCHAR(150) NOT NULL,
+    category_id INT,
+    price DECIMAL(10, 2) NOT NULL,
+    stock_qty INT DEFAULT 0,
+    FOREIGN KEY (category_id) REFERENCES categories(category_id)
+);
+
+-- 3. Customers
+CREATE TABLE customers (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    city VARCHAR(50),
+    joined_date DATE
+);
+
+-- 4. Orders
+CREATE TABLE orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
+    order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('pending', 'shipped', 'delivered', 'cancelled') DEFAULT 'pending',
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+);
+
+-- 5. Order Items
+CREATE TABLE order_items (
+    item_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT,
+    product_id INT,
+    quantity INT NOT NULL,
+    unit_price DECIMAL(10, 2) NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    FOREIGN KEY (product_id) REFERENCES products(product_id)
+);
+
+-- 6. Payments
+CREATE TABLE payments (
+    payment_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT UNIQUE,
+    amount DECIMAL(10, 2),
+    payment_date DATETIME,
+    method ENUM('UPI', 'card', 'netbanking', 'COD'),
+    FOREIGN KEY (order_id) REFERENCES orders(order_id)
+);
+
+INSERT INTO categories (category_name) VALUES
+('Electronics'), ('Clothing'), ('Books'), ('Home Appliances');
+
+INSERT INTO products (product_name, category_id, price, stock_qty) VALUES
+('Wireless Earbuds', 1, 1499.00, 50),
+('Smartphone 5G', 1, 18999.00, 20),
+('Cotton T-Shirt', 2, 399.00, 200),
+('Jeans', 2, 999.00, 150),
+('SQL for Beginners', 3, 349.00, 80),
+('Data Structures Book', 3, 499.00, 60),
+('Ceiling Fan', 4, 2499.00, 30),
+('Air Purifier', 4, 7999.00, 15);
+
+INSERT INTO customers (full_name, email, city, joined_date) VALUES
+('Ravi Kumar',    'ravi@gmail.com',   'Hyderabad', '2023-01-15'),
+('Sneha Reddy',   'sneha@gmail.com',  'Bangalore', '2023-03-22'),
+('Arun Sharma',   'arun@gmail.com',   'Chennai',   '2023-06-10'),
+('Priya Nair',    'priya@gmail.com',  'Hyderabad', '2024-01-05'),
+('Kiran Babu',    'kiran@gmail.com',  'Mumbai',    '2024-03-18');
+
+INSERT INTO orders (customer_id, order_date, status) VALUES
+(1, '2024-04-01 10:00:00', 'delivered'),
+(1, '2024-05-10 14:00:00', 'shipped'),
+(2, '2024-04-15 09:30:00', 'delivered'),
+(3, '2024-05-01 11:00:00', 'cancelled'),
+(4, '2024-05-20 16:00:00', 'pending'),
+(5, '2024-05-25 12:00:00', 'delivered');
+
+INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES
+(1, 1, 2, 1499.00),
+(1, 5, 1, 349.00),
+(2, 2, 1, 18999.00),
+(3, 3, 3, 399.00),
+(3, 4, 1, 999.00),
+(4, 6, 2, 499.00),
+(5, 7, 1, 2499.00),
+(6, 8, 1, 7999.00),
+(6, 1, 1, 1499.00);
+
+INSERT INTO payments (order_id, amount, payment_date, method) VALUES
+(1, 3347.00, '2024-04-01 10:05:00', 'UPI'),
+(2, 18999.00,'2024-05-10 14:10:00', 'card'),
+(3, 2196.00, '2024-04-15 09:35:00', 'netbanking'),
+(6, 9498.00, '2024-05-25 12:05:00', 'UPI');
+-- order 4 cancelled (no payment), order 5 pending (COD)
+
+-- All products under ₹1000
+SELECT product_name, price FROM products WHERE price < 1000;
+
+-- Customers from Hyderabad
+SELECT full_name, email FROM customers WHERE city = 'Hyderabad';
+
+-- Orders that are delivered
+SELECT * FROM orders WHERE status = 'delivered';
+
+-- Customer name with their order details
+SELECT c.full_name, o.order_id, o.order_date, o.status
+FROM customers c
+JOIN orders o ON c.customer_id = o.customer_id;
+
+-- Products in each order (with order & customer info)
+SELECT c.full_name, o.order_id, p.product_name, oi.quantity, oi.unit_price
+FROM customers c
+JOIN orders o ON c.customer_id = o.customer_id
+JOIN order_items oi ON o.order_id = oi.order_id
+JOIN products p ON oi.product_id = p.product_id;
+
+-- Customers who spent more than ₹5000
+SELECT full_name, total_spent FROM (
+    SELECT c.customer_id, c.full_name, SUM(oi.quantity * oi.unit_price) AS total_spent
+    FROM customers c
+    JOIN orders o ON c.customer_id = o.customer_id
+    JOIN order_items oi ON o.order_id = oi.order_id
+    GROUP BY c.customer_id
+) AS summary
+WHERE total_spent > 5000;
+
+-- Categories with more than 1 product below ₹500
+SELECT cat.category_name, COUNT(*) AS cheap_products
+FROM products p
+JOIN categories cat ON p.category_id = cat.category_id
+WHERE p.price < 500
+GROUP BY cat.category_id
+HAVING cheap_products > 1;
+
+-- Create a VIEW for order summary
+CREATE VIEW order_summary AS
+SELECT o.order_id, c.full_name, o.order_date, o.status,
+       SUM(oi.quantity * oi.unit_price) AS order_total
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN order_items oi ON o.order_id = oi.order_id
+GROUP BY o.order_id;
+
+-- Use the view
+SELECT * FROM order_summary WHERE status = 'delivered';
+
+-- Trigger: reduce stock when an order item is inserted
+DELIMITER //
+CREATE TRIGGER reduce_stock
+AFTER INSERT ON order_items
+FOR EACH ROW
+BEGIN
+    UPDATE products
+    SET stock_qty = stock_qty - NEW.quantity
+    WHERE product_id = NEW.product_id;
+END;
+//
+DELIMITER ;
